@@ -86,6 +86,13 @@ function create (options) {
     deleteSubDb('tag-' + name, cb)
   }
 
+  // DynamoDB Streams: stream descriptions by ARN, and one record log per stream
+  var streamDb = getSubDb('stream')
+
+  function getStreamRecordDb (streamArn) {
+    return getSubDb('streamrecord-' + streamArn)
+  }
+
   function getSubDb (name) {
     if (!subDbs[name]) {
       // Instead of using sublevel, create a wrapper around the main db with prefixed keys
@@ -541,6 +548,9 @@ function create (options) {
     getTagDb: getTagDb,
     deleteTagDb: deleteTagDb,
     getTable: getTable,
+    streamDb: streamDb,
+    getStreamRecordDb: getStreamRecordDb,
+    streamSequences: Object.create(null),
     recreate: recreate,
     lifecycleManager: lifecycleManager,
   }

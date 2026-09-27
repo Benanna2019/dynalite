@@ -67,6 +67,29 @@ var dynamo = new AWS.DynamoDB({ endpoint: 'http://localhost:4567' })
 dynamo.listTables(console.log.bind(console))
 ```
 
+## DynamoDB Streams
+
+Tables created or updated with a `StreamSpecification` get a stream, served from the same endpoint under the
+DynamoDB Streams API (`ListStreams`, `DescribeStream`, `GetShardIterator`, `GetRecords`). Point a Streams client
+at dynalite the same way:
+
+```js
+import { DynamoDBStreamsClient, GetRecordsCommand } from '@aws-sdk/client-dynamodb-streams'
+
+var streams = new DynamoDBStreamsClient({ endpoint: 'http://localhost:4567' })
+```
+
+`PutItem`, `UpdateItem`, `DeleteItem` and `BatchWriteItem` write `INSERT`, `MODIFY` and `REMOVE` records with the
+images the stream's `StreamViewType` asks for. A record is stored before the write responds, so a test can write
+and then read the stream straight away. Like DynamoDB, writes that don't change an item produce no record.
+
+Differences from DynamoDB worth knowing:
+
+- Each stream has one shard, which never splits
+- Streams are `ENABLED` as soon as the table is created (no `ENABLING` state)
+- Records older than 24 hours are hidden from reads, but not deleted from the store
+- TTL deletions don't produce records, since dynalite doesn't expire items
+
 ## Installation
 
 With [npm](https://www.npmjs.com/), to install the CLI:
@@ -84,7 +107,6 @@ npm install -D dynalite
 ## TODO
 
 - Implement [Transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html)
-- Implement DynamoDB Streams
 - Implement `ReturnItemCollectionMetrics` on all remaining endpoints
 - Implement size info for tables and indexes
 - Add ProvisionedThroughput checking

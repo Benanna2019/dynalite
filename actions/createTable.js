@@ -1,4 +1,5 @@
-var crypto = require('crypto')
+var crypto = require('crypto'),
+  streams = require('../db/streams')
 
 module.exports = function createTable (store, data, cb) {
 
@@ -71,6 +72,19 @@ module.exports = function createTable (store, data, cb) {
           })
         }
 
+        var spec = data.StreamSpecification
+        if (spec && !spec.StreamEnabled) delete data.StreamSpecification
+        if (!spec || !spec.StreamEnabled) return storeTable()
+
+        streams.createStream(store, data, spec.StreamViewType, null, function (err, stream) {
+          if (err) return cb(err)
+          data.LatestStreamArn = stream.StreamArn
+          data.LatestStreamLabel = stream.StreamLabel
+          storeTable()
+        })
+      }
+
+      function storeTable () {
         tableDb.put(key, data, function (err) {
           if (err) return cb(err)
 

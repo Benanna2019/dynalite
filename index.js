@@ -16,6 +16,9 @@ var validApis = [ 'DynamoDB_20111205', 'DynamoDB_20120810' ],
   validOperations = [ 'BatchGetItem', 'BatchWriteItem', 'CreateTable', 'DeleteItem', 'DeleteTable',
     'DescribeTable', 'DescribeTimeToLive', 'GetItem', 'ListTables', 'PutItem', 'Query', 'Scan', 'TagResource',
     'UntagResource', 'ListTagsOfResource', 'UpdateItem', 'UpdateTable' ],
+  // DynamoDB Streams is a separate API (its own target prefix) served from the same endpoint
+  streamsApi = 'DynamoDBStreams_20120810',
+  validStreamOperations = [ 'DescribeStream', 'GetRecords', 'GetShardIterator', 'ListStreams' ],
   actions = {},
   actionValidations = {}
 
@@ -179,7 +182,7 @@ function dynalite (options) {
   return server
 }
 
-validOperations.forEach(function (action) {
+validOperations.concat(validStreamOperations).forEach(function (action) {
   action = validations.toLowerFirst(action)
 
   actions[action] = require('./actions/' + action)
@@ -284,7 +287,9 @@ function httpHandler (store, req, res) {
 
     var target = (req.headers['x-amz-target'] || '').split('.')
 
-    if (target.length != 2 || !~validApis.indexOf(target[0]) || !~validOperations.indexOf(target[1]))
+    var knownOperation = target[0] == streamsApi ? ~validStreamOperations.indexOf(target[1]) :
+      ~validApis.indexOf(target[0]) && ~validOperations.indexOf(target[1])
+    if (target.length != 2 || !knownOperation)
       return sendData(req, res, { __type: 'com.amazon.coral.service#UnknownOperationException' }, 400)
 
     var authHeader = req.headers.authorization

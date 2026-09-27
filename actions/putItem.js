@@ -1,4 +1,5 @@
-var db = require('../db')
+var db = require('../db'),
+  streams = require('../db/streams')
 
 module.exports = function putItem (store, data, cb) {
 
@@ -31,7 +32,10 @@ module.exports = function putItem (store, data, cb) {
 
           itemDb.put(key, data.Item, function (err) {
             if (err) return cb(err)
-            cb(null, returnObj)
+            streams.recordChange(store, table, existingItem, data.Item, function (err) {
+              if (err) return cb(err)
+              cb(null, returnObj)
+            })
           })
         })
       })
