@@ -1,4 +1,5 @@
-var db = require('../db')
+var db = require('../db'),
+  streams = require('../db/streams')
 
 module.exports = function updateTable (store, data, cb) {
 
@@ -84,56 +85,90 @@ module.exports = function updateTable (store, data, cb) {
         table.TableThroughputModeSummary.TableThroughputMode = 'PROVISIONED'
       }
 
-      tableDb.put(key, table, function (err) {
+      applyStreamUpdate(store, table, data.StreamSpecification, function (err) {
         if (err) return cb(err)
 
-        setTimeout(function () {
+        tableDb.put(key, table, function (err) {
+          if (err) return cb(err)
 
-          // Shouldn't need to lock/fetch as nothing should have changed
-          updates.forEach(function (update) {
-            dataThroughput = update.dataThroughput
-            tableThroughput = update.tableThroughput
+          setTimeout(function () {
 
-            update.setStatus('ACTIVE')
+            // Shouldn't need to lock/fetch as nothing should have changed
+            updates.forEach(function (update) {
+              dataThroughput = update.dataThroughput
+              tableThroughput = update.tableThroughput
 
-            if (update.readDiff > 0 || update.writeDiff > 0) {
-              tableThroughput.LastIncreaseDateTime = Date.now() / 1000
+              update.setStatus('ACTIVE')
+
+              if (update.readDiff > 0 || update.writeDiff > 0) {
+                tableThroughput.LastIncreaseDateTime = Date.now() / 1000
+              }
+              else if (update.readDiff < 0 || update.writeDiff < 0) {
+                tableThroughput.LastDecreaseDateTime = Date.now() / 1000
+                tableThroughput.NumberOfDecreasesToday++
+              }
+
+              tableThroughput.ReadCapacityUnits = dataThroughput.ReadCapacityUnits
+              tableThroughput.WriteCapacityUnits = dataThroughput.WriteCapacityUnits
+            })
+
+            if (data.BillingMode == 'PAY_PER_REQUEST' && tableBillingMode != 'PAY_PER_REQUEST') {
+              table.TableStatus = 'ACTIVE'
+              table.BillingModeSummary.LastUpdateToPayPerRequestDateTime = Date.now() / 1000
+              table.TableThroughputModeSummary.LastUpdateToPayPerRequestDateTime = Date.now() / 1000
+              delete table.ProvisionedThroughput.LastDecreaseDateTime
+              if (table.GlobalSecondaryIndexes) {
+                table.GlobalSecondaryIndexes.forEach(function (index) {
+                  index.IndexStatus = 'ACTIVE'
+                  index.ProvisionedThroughput.NumberOfDecreasesToday++
+                  index.ProvisionedThroughput.LastDecreaseDateTime = Date.now() / 1000
+                })
+              }
             }
-            else if (update.readDiff < 0 || update.writeDiff < 0) {
-              tableThroughput.LastDecreaseDateTime = Date.now() / 1000
-              tableThroughput.NumberOfDecreasesToday++
-            }
 
-            tableThroughput.ReadCapacityUnits = dataThroughput.ReadCapacityUnits
-            tableThroughput.WriteCapacityUnits = dataThroughput.WriteCapacityUnits
-          })
+            tableDb.put(key, table, function (err) {
 
-          if (data.BillingMode == 'PAY_PER_REQUEST' && tableBillingMode != 'PAY_PER_REQUEST') {
-            table.TableStatus = 'ACTIVE'
-            table.BillingModeSummary.LastUpdateToPayPerRequestDateTime = Date.now() / 1000
-            table.TableThroughputModeSummary.LastUpdateToPayPerRequestDateTime = Date.now() / 1000
-            delete table.ProvisionedThroughput.LastDecreaseDateTime
-            if (table.GlobalSecondaryIndexes) {
-              table.GlobalSecondaryIndexes.forEach(function (index) {
-                index.IndexStatus = 'ACTIVE'
-                index.ProvisionedThroughput.NumberOfDecreasesToday++
-                index.ProvisionedThroughput.LastDecreaseDateTime = Date.now() / 1000
-              })
-            }
-          }
+              if (err && !/Database is (not open|closed)/.test(err)) console.error(err.stack || err)
+            })
 
-          tableDb.put(key, table, function (err) {
+          }, store.options.updateTableMs)
 
-            if (err && !/Database is (not open|closed)/.test(err)) console.error(err.stack || err)
-          })
-
-        }, store.options.updateTableMs)
-
-        cb(null, { TableDescription: table })
+          cb(null, { TableDescription: table })
+        })
       })
     })
   })
 
+}
+
+// Enables a new stream or disables the current one. Re-enabling creates a new
+// stream with a new label and ARN; the old one stays readable until it ages out.
+function applyStreamUpdate (store, table, spec, cb) {
+  if (!spec) return cb()
+  var enabled = Boolean(table.StreamSpecification && table.StreamSpecification.StreamEnabled)
+
+  if (spec.StreamEnabled && enabled) {
+    return cb(db.validationError('Table already has an enabled stream: TableName: ' + table.TableName))
+  }
+  if (!spec.StreamEnabled && !enabled) {
+    return cb(db.validationError('Table does not have an enabled stream: TableName: ' + table.TableName))
+  }
+
+  if (spec.StreamEnabled) {
+    return streams.createStream(store, table, spec.StreamViewType, table.LatestStreamLabel, function (err, stream) {
+      if (err) return cb(err)
+      table.StreamSpecification = { StreamEnabled: true, StreamViewType: spec.StreamViewType }
+      table.LatestStreamArn = stream.StreamArn
+      table.LatestStreamLabel = stream.StreamLabel
+      cb()
+    })
+  }
+
+  streams.disableStream(store, table.LatestStreamArn, function (err) {
+    if (err) return cb(err)
+    delete table.StreamSpecification
+    cb()
+  })
 }
 
 function getThroughputUpdates (data, table) {

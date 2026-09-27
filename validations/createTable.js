@@ -27,6 +27,19 @@ exports.types = {
     type: 'String',
     enum: [ 'PROVISIONED', 'PAY_PER_REQUEST' ],
   },
+  StreamSpecification: {
+    type: 'FieldStruct<StreamSpecification>',
+    children: {
+      StreamEnabled: {
+        type: 'Boolean',
+        notNull: true,
+      },
+      StreamViewType: {
+        type: 'String',
+        enum: [ 'NEW_IMAGE', 'OLD_IMAGE', 'NEW_AND_OLD_IMAGES', 'KEYS_ONLY' ],
+      },
+    },
+  },
   ProvisionedThroughput: {
     type: 'FieldStruct<ProvisionedThroughput>',
     children: {
@@ -178,6 +191,10 @@ exports.types = {
 }
 
 exports.custom = function (data) {
+
+  if (data.StreamSpecification && data.StreamSpecification.StreamEnabled && !data.StreamSpecification.StreamViewType) {
+    return 'One or more parameter values were invalid: StreamViewType is required when StreamEnabled is true'
+  }
 
   if (data.BillingMode == 'PAY_PER_REQUEST') {
     if (data.ProvisionedThroughput) {

@@ -24,6 +24,19 @@ exports.types = {
     type: 'String',
     enum: [ 'PROVISIONED', 'PAY_PER_REQUEST' ],
   },
+  StreamSpecification: {
+    type: 'FieldStruct<StreamSpecification>',
+    children: {
+      StreamEnabled: {
+        type: 'Boolean',
+        notNull: true,
+      },
+      StreamViewType: {
+        type: 'String',
+        enum: [ 'NEW_IMAGE', 'OLD_IMAGE', 'NEW_AND_OLD_IMAGES', 'KEYS_ONLY' ],
+      },
+    },
+  },
   GlobalSecondaryIndexUpdates: {
     type: 'List',
     children: {
@@ -138,7 +151,7 @@ exports.types = {
 
 exports.custom = function (data) {
 
-  if (!data.ProvisionedThroughput && !data.BillingMode && !data.UpdateStreamEnabled &&
+  if (!data.ProvisionedThroughput && !data.BillingMode && !data.StreamSpecification &&
       (!data.GlobalSecondaryIndexUpdates || !data.GlobalSecondaryIndexUpdates.length) && !data.SSESpecification) {
     return 'At least one of ProvisionedThroughput, BillingMode, UpdateStreamEnabled, GlobalSecondaryIndexUpdates or SSESpecification or ReplicaUpdates is required'
   }
@@ -153,6 +166,10 @@ exports.custom = function (data) {
       return 'Given value ' + data.ProvisionedThroughput.ReadCapacityUnits + ' for ReadCapacityUnits is out of bounds'
     if (data.ProvisionedThroughput.WriteCapacityUnits > 1000000000000)
       return 'Given value ' + data.ProvisionedThroughput.WriteCapacityUnits + ' for WriteCapacityUnits is out of bounds'
+  }
+
+  if (data.StreamSpecification && data.StreamSpecification.StreamEnabled && !data.StreamSpecification.StreamViewType) {
+    return 'One or more parameter values were invalid: StreamViewType is required when StreamEnabled is true'
   }
 
   if (data.GlobalSecondaryIndexUpdates) {

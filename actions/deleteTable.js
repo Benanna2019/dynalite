@@ -1,4 +1,5 @@
-var async = require('async')
+var async = require('async'),
+  streams = require('../db/streams')
 
 module.exports = function deleteTable (store, data, cb) {
 
@@ -33,6 +34,10 @@ module.exports = function deleteTable (store, data, cb) {
     table.TableStatus = 'DELETING'
 
     var deletes = [ store.deleteItemDb.bind(store, key), store.deleteTagDb.bind(store, key) ]
+    // The stream outlives the table (readable for 24 hours), so close it rather than delete it
+    if (table.StreamSpecification && table.StreamSpecification.StreamEnabled) {
+      deletes.push(streams.disableStream.bind(null, store, table.LatestStreamArn))
+    }
     ;[ 'Local', 'Global' ].forEach(function (indexType) {
       var indexes = table[indexType + 'SecondaryIndexes'] || []
       deletes = deletes.concat(indexes.map(function (index) {
