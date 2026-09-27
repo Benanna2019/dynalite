@@ -2,6 +2,17 @@
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Added DynamoDB Streams: `StreamSpecification` on `CreateTable` and `UpdateTable`, stream records from item writes,
+  and the `ListStreams`, `DescribeStream`, `GetShardIterator` and `GetRecords` operations; fixes
+  [#66](https://github.com/architect/dynalite/issues/66). Storage and iterator design adapted from
+  [kinesalite](https://github.com/mhart/kinesalite)
+
+---
+
 ## [4.0.0]
 
 Hello! After a bit of a hiatus, the [Architect team](https://github.com/architect/dynalite/issues/166) is pleased bring the first new Dynalite release in years!
